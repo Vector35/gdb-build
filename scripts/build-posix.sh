@@ -129,6 +129,16 @@ fi
     make install-strip
 )
 
+# Keep the embedded payload runtime-only. The build produces several development libraries,
+# headers, manuals, and helper scripts that are not used by the MI adapter.
+rm -rf "$prefix/include" "$prefix/share/info" "$prefix/share/man"
+find "$prefix/lib" -type f \( -name '*.a' -o -name '*.la' \) -delete 2>/dev/null || true
+if [[ "$platform_name" == "win64" ]]; then
+    find "$prefix/bin" -maxdepth 1 -type f ! -name 'gdb.exe' -delete
+else
+    find "$prefix/bin" -maxdepth 1 -type f ! -name 'gdb' -delete
+fi
+
 cp "$source_dir/COPYING" "$prefix/COPYING"
 python3 "$repo_root/scripts/package.py" \
     --platform "$platform_name" \
