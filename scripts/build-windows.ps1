@@ -35,8 +35,15 @@ if (-not $MsysRoot) {
 }
 
 $Bash = Join-Path $MsysRoot "usr\bin\bash.exe"
-$RepoForMsys = (& $Bash -lc "cygpath -u `"$RepoRoot`"").Trim()
+# A freshly extracted MSYS2 environment emits its first-run setup messages on
+# stdout before running the requested command.  Complete that setup separately
+# so its output cannot become part of the translated workspace path.
+& $Bash -lc "true" | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "Failed to initialize the MSYS2 environment." }
+
+$RepoForMsys = ((& $Bash -lc "cygpath -u `"$RepoRoot`"") | Select-Object -Last 1).Trim()
 if ($LASTEXITCODE -ne 0) { throw "Failed to translate the workspace path for MSYS2." }
+if (-not $RepoForMsys.StartsWith("/")) { throw "MSYS2 returned an invalid workspace path: $RepoForMsys" }
 
 & $Bash -lc "cd '$RepoForMsys' && exec ./scripts/build-windows-msys2.sh"
 if ($LASTEXITCODE -ne 0) { throw "GDB build failed with exit code $LASTEXITCODE." }
