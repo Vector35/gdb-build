@@ -63,6 +63,7 @@ if [[ "$platform_name" == "macosx" ]]; then
     # Avoid inheriting Homebrew's native-arm compiler and library flags in the Rosetta process.
     unset CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
     unset PKG_CONFIG_PATH
+    patch -d "$source_dir" -p1 < "$repo_root/patches/gdb-17.2-darwin-common-inferior.patch"
 fi
 
 jobs="${GDB_BUILD_JOBS:-}"

@@ -1,0 +1,12 @@
+diff --git a/gdb/darwin-nat.c b/gdb/darwin-nat.c
+index d88a0aab2dd..2ab337416a3 100644
+--- a/gdb/darwin-nat.c
++++ b/gdb/darwin-nat.c
+@@ -63,6 +63,7 @@
+ #include "gdbsupport/scoped_fd.h"
+ #include "gdbsupport/scoped_restore.h"
+ #include "nat/fork-inferior.h"
++#include "gdbsupport/common-inferior.h"
+ #include "gdbsupport/eintr.h"
+ 
+ /* Quick overview.
