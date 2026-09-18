@@ -63,11 +63,6 @@ if [[ -z "$jobs" ]]; then
     if command -v nproc >/dev/null 2>&1; then jobs="$(nproc)"; else jobs="$(sysctl -n hw.logicalcpu)"; fi
 fi
 
-host_args=()
-if [[ "$platform_name" == "win64" ]]; then
-    host_args=(--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32)
-fi
-
 build_dependency() {
     local name="$1" version="$2" sha="$3" configure_extra="${4:-}"
     local dep_archive="$download_dir/$name-$version.tar.xz"
@@ -78,9 +73,16 @@ build_dependency() {
     tar -xf "$dep_archive" --strip-components=1 -C "$dep_source"
     # configure_extra is controlled by this script and intentionally split into arguments.
     # shellcheck disable=SC2086
-    (cd "$dep_obj" && "$dep_source/configure" "${host_args[@]}" \
-        --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \
-        && make -j"$jobs" && make install)
+    if [[ "$platform_name" == "win64" ]]; then
+        (cd "$dep_obj" && "$dep_source/configure" \
+            --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 \
+            --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \
+            && make -j"$jobs" && make install)
+    else
+        (cd "$dep_obj" && "$dep_source/configure" \
+            --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \
+            && make -j"$jobs" && make install)
+    fi
 }
 
 build_dependency gmp "$GMP_VERSION" "$GMP_SHA256"
@@ -108,7 +110,9 @@ configure_args=(
     "--with-mpfr=$dependencies_prefix"
 )
 
-configure_args+=("${host_args[@]}")
+if [[ "$platform_name" == "win64" ]]; then
+    configure_args+=(--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32)
+fi
 
 (
     cd "$obj_dir"
