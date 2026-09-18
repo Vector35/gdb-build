@@ -124,7 +124,11 @@ fi
 
 (
     cd "$obj_dir"
-    "$source_dir/configure" "${configure_args[@]}"
+    if ! "$source_dir/configure" "${configure_args[@]}"; then
+        echo "GDB configure failed; final config.log diagnostics follow:" >&2
+        tail -200 config.log >&2 || true
+        exit 1
+    fi
     make -j"$jobs"
     make install-strip
 )
