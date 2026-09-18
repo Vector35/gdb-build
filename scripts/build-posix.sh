@@ -18,16 +18,13 @@ archive="$download_dir/gdb-$GDB_VERSION.tar.xz"
 source_dir="$build_dir/source"
 obj_dir="$build_dir/obj"
 prefix="$stage_dir/gdb"
+dependencies_prefix="$build_dir/dependencies"
 
 rm -rf "$build_dir" "$stage_dir"
-mkdir -p "$download_dir" "$source_dir" "$obj_dir" "$prefix"
+mkdir -p "$download_dir" "$source_dir" "$obj_dir" "$prefix" "$dependencies_prefix"
 
-if [[ ! -f "$archive" ]]; then
-    curl --fail --location --retry 3 \
-        --output "$archive" "https://ftp.gnu.org/gnu/gdb/gdb-$GDB_VERSION.tar.xz"
-fi
-
-actual_sha="$(python3 - "$archive" <<'PY'
+sha256_file() {
+    python3 - "$1" <<'PY'
 import hashlib, pathlib, sys
 h = hashlib.sha256()
 with pathlib.Path(sys.argv[1]).open('rb') as f:
@@ -35,11 +32,22 @@ with pathlib.Path(sys.argv[1]).open('rb') as f:
         h.update(chunk)
 print(h.hexdigest())
 PY
-)"
-if [[ "$actual_sha" != "$GDB_SHA256" ]]; then
-    echo "GDB source SHA-256 mismatch: expected $GDB_SHA256, got $actual_sha" >&2
-    exit 1
-fi
+}
+
+download_and_verify() {
+    local url="$1" archive_path="$2" expected_sha="$3"
+    if [[ ! -f "$archive_path" ]]; then
+        curl --fail --location --retry 3 --output "$archive_path" "$url"
+    fi
+    local actual_sha
+    actual_sha="$(sha256_file "$archive_path")"
+    if [[ "$actual_sha" != "$expected_sha" ]]; then
+        echo "Source SHA-256 mismatch for $archive_path: expected $expected_sha, got $actual_sha" >&2
+        exit 1
+    fi
+}
+
+download_and_verify "https://ftp.gnu.org/gnu/gdb/gdb-$GDB_VERSION.tar.xz" "$archive" "$GDB_SHA256"
 
 tar -xf "$archive" --strip-components=1 -C "$source_dir"
 
@@ -54,6 +62,32 @@ jobs="${GDB_BUILD_JOBS:-}"
 if [[ -z "$jobs" ]]; then
     if command -v nproc >/dev/null 2>&1; then jobs="$(nproc)"; else jobs="$(sysctl -n hw.logicalcpu)"; fi
 fi
+
+host_args=()
+if [[ "$platform_name" == "win64" ]]; then
+    host_args=(--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32)
+fi
+
+build_dependency() {
+    local name="$1" version="$2" sha="$3" configure_extra="${4:-}"
+    local dep_archive="$download_dir/$name-$version.tar.xz"
+    local dep_source="$build_dir/$name-source"
+    local dep_obj="$build_dir/$name-obj"
+    download_and_verify "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz" "$dep_archive" "$sha"
+    mkdir -p "$dep_source" "$dep_obj"
+    tar -xf "$dep_archive" --strip-components=1 -C "$dep_source"
+    # configure_extra is controlled by this script and intentionally split into arguments.
+    # shellcheck disable=SC2086
+    (cd "$dep_obj" && "$dep_source/configure" "${host_args[@]}" \
+        --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \
+        && make -j"$jobs" && make install)
+}
+
+build_dependency gmp "$GMP_VERSION" "$GMP_SHA256"
+build_dependency mpfr "$MPFR_VERSION" "$MPFR_SHA256" "--with-gmp=$dependencies_prefix"
+
+export CPPFLAGS="-I$dependencies_prefix/include ${CPPFLAGS:-}"
+export LDFLAGS="-L$dependencies_prefix/lib ${LDFLAGS:-}"
 
 configure_args=(
     "--prefix=$prefix"
@@ -70,11 +104,11 @@ configure_args=(
     --with-python=no
     --with-guile=no
     --without-babeltrace
+    "--with-gmp=$dependencies_prefix"
+    "--with-mpfr=$dependencies_prefix"
 )
 
-if [[ "$platform_name" == "win64" ]]; then
-    configure_args+=(--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32)
-fi
+configure_args+=("${host_args[@]}")
 
 (
     cd "$obj_dir"
