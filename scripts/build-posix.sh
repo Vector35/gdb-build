@@ -7,6 +7,12 @@ case "$platform_name" in
     *) echo "usage: $0 {linux|linux-arm|macosx|win64}" >&2; exit 2 ;;
 esac
 
+if [[ "$platform_name" == "macosx" && "$(uname -m)" == "arm64" && "${GDB_BUILD_UNDER_ROSETTA:-0}" != "1" ]]; then
+    # Configure must be able to execute its host probes. Re-exec the complete build under
+    # Rosetta instead of attempting an Autoconf cross-build from arm64 to x86_64.
+    exec /usr/bin/env GDB_BUILD_UNDER_ROSETTA=1 /usr/bin/arch -x86_64 /bin/bash "$0" "$@"
+fi
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=../versions.env
 source "$repo_root/versions.env"
@@ -54,12 +60,8 @@ tar -xf "$archive" --strip-components=1 -C "$source_dir"
 if [[ "$platform_name" == "macosx" ]]; then
     # Upstream GDB does not support an aarch64-apple-darwin host. Build the supported
     # x86_64 host executable on Apple Silicon; downstream macOS systems run it via Rosetta.
-    # Avoid Homebrew's native-arm libraries while cross-compiling.
-    export CC="clang -arch x86_64"
-    export CXX="clang++ -arch x86_64"
-    export CFLAGS="-O2 -arch x86_64"
-    export CXXFLAGS="-O2 -arch x86_64"
-    export LDFLAGS="-arch x86_64"
+    # Avoid inheriting Homebrew's native-arm compiler and library flags in the Rosetta process.
+    unset CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
     unset PKG_CONFIG_PATH
 fi
 
@@ -81,11 +83,6 @@ build_dependency() {
     if [[ "$platform_name" == "win64" ]]; then
         (cd "$dep_obj" && "$dep_source/configure" \
             --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 \
-            --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \
-            && make -j"$jobs" && make install)
-    elif [[ "$platform_name" == "macosx" ]]; then
-        (cd "$dep_obj" && "$dep_source/configure" \
-            --build="$($dep_source/config.guess)" --host=x86_64-apple-darwin \
             --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \
             && make -j"$jobs" && make install)
     else
@@ -123,8 +120,6 @@ configure_args=(
 
 if [[ "$platform_name" == "win64" ]]; then
     configure_args+=(--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32)
-elif [[ "$platform_name" == "macosx" ]]; then
-    configure_args+=(--build="$($source_dir/config.guess)" --host=x86_64-apple-darwin --target=x86_64-apple-darwin)
 fi
 
 (
