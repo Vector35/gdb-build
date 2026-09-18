@@ -20,6 +20,7 @@ pipeline {
             matrix {
                 agent { label "${PLATFORM}" }
                 when {
+                    beforeAgent true
                     anyOf {
                         expression { params.OS_FILTER == 'all' }
                         expression { params.OS_FILTER == env.PLATFORM }
