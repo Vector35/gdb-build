@@ -85,6 +85,12 @@ build_dependency() {
             --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 \
             --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \
             && make -j"$jobs" && make install)
+    elif [[ "$platform_name" == "macosx" ]]; then
+        # Shared prerequisites record their dependency install names on Darwin and avoid
+        # static-link probe failures; package.py relocates both dylibs beside GDB.
+        (cd "$dep_obj" && "$dep_source/configure" \
+            --prefix="$dependencies_prefix" --enable-shared --disable-static $configure_extra \
+            && make -j"$jobs" && make install)
     else
         (cd "$dep_obj" && "$dep_source/configure" \
             --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \

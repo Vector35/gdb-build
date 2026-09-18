@@ -45,9 +45,10 @@ Windows builds run in MSYS2's MINGW64 environment:
 ./scripts/build-windows.ps1
 ```
 
-The PowerShell entry point locates an existing MSYS2 installation, installs the
-required MinGW packages with `pacman`, and invokes the shared build logic. It
-does not require or perform code signing.
+The PowerShell entry point locates an existing MSYS2 installation or bootstraps
+a pinned, SHA-256-verified portable MSYS2 environment in the workspace. It then
+installs the required MinGW packages with `pacman` and invokes the shared build
+logic. It does not require or perform code signing.
 
 ## Jenkins
 
