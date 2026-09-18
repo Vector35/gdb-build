@@ -23,6 +23,9 @@ gdb/
 ```
 
 Supported platform names are `linux`, `linux-arm`, `macosx`, and `win64`.
+The macOS archive currently contains an x86_64 executable because upstream GDB
+does not support an `aarch64-apple-darwin` host; it runs on Apple Silicon through
+Rosetta and remains suitable for MI-based remote debugging.
 
 ## Local builds
 

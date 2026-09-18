@@ -51,11 +51,16 @@ download_and_verify "https://ftp.gnu.org/gnu/gdb/gdb-$GDB_VERSION.tar.xz" "$arch
 
 tar -xf "$archive" --strip-components=1 -C "$source_dir"
 
-if [[ "$platform_name" == "macosx" ]] && command -v brew >/dev/null 2>&1; then
-    brew_prefix="$(brew --prefix)"
-    export CPPFLAGS="-I$brew_prefix/include ${CPPFLAGS:-}"
-    export LDFLAGS="-L$brew_prefix/lib ${LDFLAGS:-}"
-    export PKG_CONFIG_PATH="$brew_prefix/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+if [[ "$platform_name" == "macosx" ]]; then
+    # Upstream GDB does not support an aarch64-apple-darwin host. Build the supported
+    # x86_64 host executable on Apple Silicon; downstream macOS systems run it via Rosetta.
+    # Avoid Homebrew's native-arm libraries while cross-compiling.
+    export CC="clang -arch x86_64"
+    export CXX="clang++ -arch x86_64"
+    export CFLAGS="-O2 -arch x86_64"
+    export CXXFLAGS="-O2 -arch x86_64"
+    export LDFLAGS="-arch x86_64"
+    unset PKG_CONFIG_PATH
 fi
 
 jobs="${GDB_BUILD_JOBS:-}"
@@ -76,6 +81,11 @@ build_dependency() {
     if [[ "$platform_name" == "win64" ]]; then
         (cd "$dep_obj" && "$dep_source/configure" \
             --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 \
+            --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \
+            && make -j"$jobs" && make install)
+    elif [[ "$platform_name" == "macosx" ]]; then
+        (cd "$dep_obj" && "$dep_source/configure" \
+            --build="$($dep_source/config.guess)" --host=x86_64-apple-darwin \
             --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \
             && make -j"$jobs" && make install)
     else
@@ -102,6 +112,7 @@ configure_args=(
     --disable-gdbserver
     --disable-nls
     --disable-source-highlight
+    --disable-tui
     --disable-werror
     --with-python=no
     --with-guile=no
@@ -112,6 +123,8 @@ configure_args=(
 
 if [[ "$platform_name" == "win64" ]]; then
     configure_args+=(--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32)
+elif [[ "$platform_name" == "macosx" ]]; then
+    configure_args+=(--build="$($source_dir/config.guess)" --host=x86_64-apple-darwin --target=x86_64-apple-darwin)
 fi
 
 (
