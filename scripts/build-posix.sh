@@ -114,6 +114,12 @@ fi
 export CPPFLAGS="-I$dependencies_prefix/include ${CPPFLAGS:-}"
 export LDFLAGS="-L$dependencies_prefix/lib ${LDFLAGS:-}"
 
+if [[ "$platform_name" == "win64" ]]; then
+    # MinGW provides static archives for the runtime and all selected GDB
+    # prerequisites. Keep the embedded Windows payload to one executable.
+    export LDFLAGS="-static -static-libgcc -static-libstdc++ $LDFLAGS"
+fi
+
 configure_args=(
     "--prefix=$prefix"
     --enable-targets=all
@@ -135,7 +141,11 @@ configure_args=(
 )
 
 if [[ "$platform_name" == "win64" ]]; then
-    configure_args+=(--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32)
+    configure_args+=(
+        --build=x86_64-w64-mingw32
+        --host=x86_64-w64-mingw32
+        --with-static-standard-libraries
+    )
 fi
 
 (

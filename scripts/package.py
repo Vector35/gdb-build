@@ -102,22 +102,21 @@ def bundle_windows(executable, bin_dir):
         "msvcrt.dll", "ntdll.dll", "shell32.dll", "ucrtbase.dll", "user32.dll",
         "ws2_32.dll",
     }
-    queue = [executable]
-    seen = set()
-    while queue:
-        binary = queue.pop(0)
-        output = run("objdump", "-p", str(binary))
-        for name in re.findall(r"DLL Name:\s*(\S+)", output, re.IGNORECASE):
-            lower = name.lower()
-            if lower in system or lower.startswith(("api-ms-win-", "ext-ms-win-")) or lower in seen:
-                continue
-            source = find_windows_dll(name)
-            if source is None or is_windows_system_dll(source):
-                continue
-            seen.add(lower)
-            bundled = bin_dir / name
-            if copy_once(source, bundled):
-                queue.append(bundled)
+    external = []
+    output = run("objdump", "-p", str(executable))
+    for name in re.findall(r"DLL Name:\s*(\S+)", output, re.IGNORECASE):
+        lower = name.lower()
+        if lower in system or lower.startswith(("api-ms-win-", "ext-ms-win-")):
+            continue
+        source = find_windows_dll(name)
+        if source is not None and is_windows_system_dll(source):
+            continue
+        external.append(name)
+    if external:
+        raise SystemExit(
+            "Windows GDB is not fully runtime-static; external DLL imports: "
+            + ", ".join(sorted(external, key=str.lower))
+        )
 
 
 def main():
