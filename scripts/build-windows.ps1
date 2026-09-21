@@ -41,7 +41,7 @@ $Bash = Join-Path $MsysRoot "usr\bin\bash.exe"
 & $Bash -lc "true" | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Failed to initialize the MSYS2 environment." }
 
-$RepoForMsys = ((& $Bash -lc "cygpath -u `"$RepoRoot`"") | Select-Object -Last 1).Trim()
+$RepoForMsys = ((& $Bash -lc 'cygpath -u "$1"' -- $RepoRoot) | Select-Object -Last 1).Trim()
 if ($LASTEXITCODE -ne 0) { throw "Failed to translate the workspace path for MSYS2." }
 if (-not $RepoForMsys.StartsWith("/")) { throw "MSYS2 returned an invalid workspace path: $RepoForMsys" }
 
