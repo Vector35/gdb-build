@@ -167,7 +167,14 @@ fi
         tail -200 config.log >&2 || true
         exit 1
     fi
-    make -j"$jobs" "${make_args[@]}"
+    make -j"$jobs"
+    if [[ "$platform_name" == "win64" ]]; then
+        # The top-level recursive make supplies its configured dependency values
+        # explicitly to the GDB submake. Relink in that subdirectory so these
+        # full static-archive paths cannot be replaced by import-library flags.
+        rm -f "$obj_dir/gdb/gdb.exe"
+        make -C "$obj_dir/gdb" -j"$jobs" V=1 "${make_args[@]}" gdb.exe
+    fi
     make "${make_args[@]}" install-strip
 )
 
