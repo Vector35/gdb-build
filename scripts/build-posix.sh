@@ -50,6 +50,14 @@ if [[ "$platform_name" == "win64" ]]; then
     done
 fi
 
+make_args=()
+if [[ "$platform_name" == "win64" ]]; then
+    # GDB's configured CLIBS already contains -ltermcap. The bundled readline
+    # substitution also adds it, which is harmless for a DLL import library but
+    # can extract the static termcap object twice and create duplicate globals.
+    make_args+=("READLINE=../readline/readline/libreadline.a")
+fi
+
 sha256_file() {
     python3 - "$1" <<'PY'
 import hashlib, pathlib, sys
@@ -169,8 +177,8 @@ fi
         tail -200 config.log >&2 || true
         exit 1
     fi
-    make -j"$jobs"
-    make install-strip
+    make -j"$jobs" "${make_args[@]}"
+    make "${make_args[@]}" install-strip
 )
 
 # Keep the embedded payload runtime-only. The build produces several development libraries,
