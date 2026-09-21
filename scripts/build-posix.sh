@@ -40,9 +40,10 @@ if [[ "$platform_name" == "win64" ]]; then
     # This MSYS2 installation lives only inside the Jenkins workspace. Hide the
     # import libraries for dependencies that provide static archives, ensuring
     # Autoconf probes and recursive makefiles consistently resolve -lfoo to the
-    # static implementation.
+    # static implementation. Hide termcap entirely so GDB selects its MinGW
+    # stub, avoiding GNU termcap's conflicting global and DLL annotations.
     for import_library in \
-        libgmp.dll.a libmpfr.dll.a libtermcap.dll.a libz.dll.a \
+        libgmp.dll.a libmpfr.dll.a libtermcap.a libtermcap.dll.a libz.dll.a \
         libpthread.dll.a libwinpthread.dll.a; do
         if [[ -f "/mingw64/lib/$import_library" ]]; then
             mv "/mingw64/lib/$import_library" "/mingw64/lib/$import_library.disabled"
@@ -52,9 +53,10 @@ fi
 
 make_args=()
 if [[ "$platform_name" == "win64" ]]; then
-    # GDB's configured CLIBS already contains -ltermcap. The bundled readline
-    # substitution also adds it, which is harmless for a DLL import library but
-    # can extract the static termcap object twice and create duplicate globals.
+    # Keep Readline's objects but let GDB's MinGW termcap stub provide the small
+    # API surface needed by the non-TUI MI build. GNU termcap's static archive
+    # conflicts with Readline's PC global, while its headers make some GDB
+    # translation units expect DLL-imported functions.
     make_args+=("READLINE=../readline/readline/libreadline.a")
 fi
 
