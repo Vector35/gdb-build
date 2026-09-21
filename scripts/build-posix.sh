@@ -33,6 +33,18 @@ if [[ "$platform_name" == "win64" ]]; then
     dependencies_prefix="/mingw64"
 fi
 
+make_args=()
+if [[ "$platform_name" == "win64" ]]; then
+    # GDB's generated makefiles otherwise replace these with plain -l options,
+    # which select the MSYS2 import libraries even when LDFLAGS contains -static.
+    make_args+=(
+        "GMPLIBS=/mingw64/lib/libmpfr.a /mingw64/lib/libgmp.a"
+        "PTHREAD_LIBS=/mingw64/lib/libwinpthread.a"
+        "READLINE=../readline/readline/libreadline.a /mingw64/lib/libtermcap.a"
+        "ZLIB=/mingw64/lib/libz.a"
+    )
+fi
+
 rm -rf "$build_dir" "$stage_dir"
 mkdir -p "$download_dir" "$source_dir" "$obj_dir" "$prefix" "$dependencies_prefix"
 
@@ -155,8 +167,8 @@ fi
         tail -200 config.log >&2 || true
         exit 1
     fi
-    make -j"$jobs"
-    make install-strip
+    make -j"$jobs" "${make_args[@]}"
+    make "${make_args[@]}" install-strip
 )
 
 # Keep the embedded payload runtime-only. The build produces several development libraries,
