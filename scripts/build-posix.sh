@@ -33,20 +33,22 @@ if [[ "$platform_name" == "win64" ]]; then
     dependencies_prefix="/mingw64"
 fi
 
-make_args=()
-if [[ "$platform_name" == "win64" ]]; then
-    # GDB's generated makefiles otherwise replace these with plain -l options,
-    # which select the MSYS2 import libraries even when LDFLAGS contains -static.
-    make_args+=(
-        "GMPLIBS=/mingw64/lib/libmpfr.a /mingw64/lib/libgmp.a"
-        "PTHREAD_LIBS=/mingw64/lib/libwinpthread.a"
-        "READLINE=../readline/readline/libreadline.a /mingw64/lib/libtermcap.a"
-        "ZLIB=/mingw64/lib/libz.a"
-    )
-fi
-
 rm -rf "$build_dir" "$stage_dir"
 mkdir -p "$download_dir" "$source_dir" "$obj_dir" "$prefix" "$dependencies_prefix"
+
+if [[ "$platform_name" == "win64" ]]; then
+    # This MSYS2 installation lives only inside the Jenkins workspace. Hide the
+    # import libraries for dependencies that provide static archives, ensuring
+    # Autoconf probes and recursive makefiles consistently resolve -lfoo to the
+    # static implementation.
+    for import_library in \
+        libgmp.dll.a libmpfr.dll.a libtermcap.dll.a libz.dll.a \
+        libpthread.dll.a libwinpthread.dll.a; do
+        if [[ -f "/mingw64/lib/$import_library" ]]; then
+            mv "/mingw64/lib/$import_library" "/mingw64/lib/$import_library.disabled"
+        fi
+    done
+fi
 
 sha256_file() {
     python3 - "$1" <<'PY'
@@ -168,14 +170,7 @@ fi
         exit 1
     fi
     make -j"$jobs"
-    if [[ "$platform_name" == "win64" ]]; then
-        # The top-level recursive make supplies its configured dependency values
-        # explicitly to the GDB submake. Relink in that subdirectory so these
-        # full static-archive paths cannot be replaced by import-library flags.
-        rm -f "$obj_dir/gdb/gdb.exe"
-        make -C "$obj_dir/gdb" -j"$jobs" V=1 "${make_args[@]}" gdb.exe
-    fi
-    make "${make_args[@]}" install-strip
+    make install-strip
 )
 
 # Keep the embedded payload runtime-only. The build produces several development libraries,
