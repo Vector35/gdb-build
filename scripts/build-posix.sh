@@ -26,6 +26,13 @@ obj_dir="$build_dir/obj"
 prefix="$stage_dir/gdb"
 dependencies_prefix="$build_dir/dependencies"
 
+if [[ "$platform_name" == "win64" ]]; then
+    # The pinned MSYS2 environment provides a matched MinGW toolchain and development
+    # packages. Reuse those packages instead of rebuilding GMP/MPFR with a compiler
+    # newer than their configure-time compiler probes understand.
+    dependencies_prefix="/mingw64"
+fi
+
 rm -rf "$build_dir" "$stage_dir"
 mkdir -p "$download_dir" "$source_dir" "$obj_dir" "$prefix" "$dependencies_prefix"
 
@@ -99,8 +106,10 @@ build_dependency() {
     fi
 }
 
-build_dependency gmp "$GMP_VERSION" "$GMP_SHA256"
-build_dependency mpfr "$MPFR_VERSION" "$MPFR_SHA256" "--with-gmp=$dependencies_prefix"
+if [[ "$platform_name" != "win64" ]]; then
+    build_dependency gmp "$GMP_VERSION" "$GMP_SHA256"
+    build_dependency mpfr "$MPFR_VERSION" "$MPFR_SHA256" "--with-gmp=$dependencies_prefix"
+fi
 
 export CPPFLAGS="-I$dependencies_prefix/include ${CPPFLAGS:-}"
 export LDFLAGS="-L$dependencies_prefix/lib ${LDFLAGS:-}"
