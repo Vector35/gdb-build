@@ -85,8 +85,23 @@ def find_windows_dll(name):
     return None
 
 
+def is_windows_system_dll(path):
+    windows_dir = os.environ.get("WINDIR")
+    if not windows_dir:
+        return False
+    try:
+        path.resolve().relative_to(pathlib.Path(windows_dir).resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def bundle_windows(executable, bin_dir):
-    system = {"kernel32.dll", "user32.dll", "advapi32.dll", "shell32.dll", "ws2_32.dll", "ntdll.dll"}
+    system = {
+        "advapi32.dll", "bcrypt.dll", "kernel32.dll", "kernelbase.dll",
+        "msvcrt.dll", "ntdll.dll", "shell32.dll", "ucrtbase.dll", "user32.dll",
+        "ws2_32.dll",
+    }
     queue = [executable]
     seen = set()
     while queue:
@@ -94,10 +109,10 @@ def bundle_windows(executable, bin_dir):
         output = run("objdump", "-p", str(binary))
         for name in re.findall(r"DLL Name:\s*(\S+)", output, re.IGNORECASE):
             lower = name.lower()
-            if lower in system or lower in seen:
+            if lower in system or lower.startswith(("api-ms-win-", "ext-ms-win-")) or lower in seen:
                 continue
             source = find_windows_dll(name)
-            if source is None:
+            if source is None or is_windows_system_dll(source):
                 continue
             seen.add(lower)
             bundled = bin_dir / name
