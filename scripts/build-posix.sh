@@ -42,11 +42,13 @@ if [[ "$platform_name" == "win64" ]]; then
     # Autoconf probes and recursive makefiles consistently resolve -lfoo to the
     # static implementation. Hide termcap entirely so GDB selects its MinGW
     # stub, avoiding GNU termcap's conflicting global and DLL annotations.
-    for import_library in \
+    for hidden_library in \
         libgmp.dll.a libmpfr.dll.a libtermcap.a libtermcap.dll.a libz.dll.a \
-        libpthread.dll.a libwinpthread.dll.a; do
-        if [[ -f "/mingw64/lib/$import_library" ]]; then
-            mv "/mingw64/lib/$import_library" "/mingw64/lib/$import_library.disabled"
+        libtinfow.a libtinfow.dll.a libtinfo.a libtinfo.dll.a \
+        libcurses.a libcurses.dll.a libncursesw.a libncursesw.dll.a \
+        libncurses.a libncurses.dll.a libpthread.dll.a libwinpthread.dll.a; do
+        if [[ -f "/mingw64/lib/$hidden_library" ]]; then
+            mv "/mingw64/lib/$hidden_library" "/mingw64/lib/$hidden_library.disabled"
         fi
     done
 fi
