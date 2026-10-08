@@ -50,6 +50,8 @@ def bundle_linux(executable, lib_dir):
 def mac_dependencies(binary):
     deps = []
     for line in run("otool", "-L", str(binary)).splitlines()[1:]:
+        if line.endswith(":"):
+            continue  # Universal binaries repeat a header for each slice.
         value = line.strip().split(" (compatibility", 1)[0]
         if value.startswith(("/System/", "/usr/lib/", "@")):
             continue
@@ -148,6 +150,11 @@ def main():
         "source_sha256": args.source_sha256,
         "version_output": version_output,
     }
+    if args.platform == "macosx":
+        manifest["host_architectures"] = run("/usr/bin/lipo", "-archs", str(executable)).split()
+        manifest["remote_only_host_architectures"] = [
+            arch for arch in manifest["host_architectures"] if arch == "arm64"
+        ]
     (args.root / "build-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
     smoke = subprocess.run(

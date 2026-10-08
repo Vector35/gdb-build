@@ -23,9 +23,11 @@ gdb/
 ```
 
 Supported platform names are `linux`, `linux-arm`, `macosx`, and `win64`.
-The macOS archive currently contains an x86_64 executable because upstream GDB
-does not support an `aarch64-apple-darwin` host; it runs on Apple Silicon through
-Rosetta and remains suitable for MI-based remote debugging. The version-scoped
+The macOS archive contains a universal ARM64/x86_64 executable and universal
+GMP/MPFR libraries. Building it requires an Apple Silicon worker with Rosetta.
+The ARM64 slice is remote-only: upstream GDB lacks a Darwin ARM64 native backend.
+The x86_64 slice retains Darwin native support. Both support all remote targets.
+The version-scoped
 patch in `patches/` adds the missing declaration include required to compile
 GDB 17.2's Darwin native source.
 

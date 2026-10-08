@@ -7,7 +7,11 @@ case "$platform_name" in
     *) echo "usage: $0 {linux|linux-arm|macosx|win64}" >&2; exit 2 ;;
 esac
 
-if [[ "$platform_name" == "macosx" && "$(uname -m)" == "arm64" && "${GDB_BUILD_UNDER_ROSETTA:-0}" != "1" ]]; then
+if [[ "$platform_name" == "macosx" && -z "${GDB_MACOS_ARCH:-}" ]]; then
+    exec /bin/bash "$(dirname "$0")/build-macos-universal.sh"
+fi
+
+if [[ "$platform_name" == "macosx" && "$(uname -m)" == "arm64" && "${GDB_MACOS_ARCH:-x86_64}" != "arm64" && "${GDB_BUILD_UNDER_ROSETTA:-0}" != "1" ]]; then
     # Configure must be able to execute its host probes. Re-exec the complete build under
     # Rosetta instead of attempting an Autoconf cross-build from arm64 to x86_64.
     exec /usr/bin/env GDB_BUILD_UNDER_ROSETTA=1 /usr/bin/arch -x86_64 /bin/bash "$0" "$@"
@@ -20,6 +24,10 @@ source "$repo_root/versions.env"
 download_dir="$repo_root/downloads"
 build_dir="$repo_root/build/$platform_name"
 stage_dir="$repo_root/stage/$platform_name"
+if [[ "$platform_name" == "macosx" && "${GDB_MACOS_ARCH:-}" == "arm64" ]]; then
+    build_dir="$repo_root/build/macosx-arm64"
+    stage_dir="$repo_root/stage/macosx-arm64"
+fi
 archive="$download_dir/gdb-$GDB_VERSION.tar.xz"
 source_dir="$build_dir/source"
 obj_dir="$build_dir/obj"
@@ -96,6 +104,13 @@ if [[ "$platform_name" == "macosx" ]]; then
     # Avoid inheriting Homebrew's native-arm compiler and library flags in the Rosetta process.
     unset CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
     unset PKG_CONFIG_PATH
+    # Explicit compiler architectures are needed even under Rosetta: recent
+    # Xcode tools can otherwise execute their ARM64 slice and emit ARM objects.
+    export CC="clang -arch ${GDB_MACOS_ARCH:-x86_64}"
+    export CXX="clang++ -arch ${GDB_MACOS_ARCH:-x86_64}"
+    export CFLAGS="-arch ${GDB_MACOS_ARCH:-x86_64}"
+    export CXXFLAGS="$CFLAGS"
+    export LDFLAGS="$CFLAGS"
     patch -d "$source_dir" -p1 < "$repo_root/patches/gdb-17.2-darwin-common-inferior.patch"
 fi
 
@@ -133,7 +148,13 @@ build_dependency() {
 }
 
 if [[ "$platform_name" != "win64" ]]; then
-    build_dependency gmp "$GMP_VERSION" "$GMP_SHA256"
+    if [[ "$platform_name" == "macosx" ]]; then
+        # Portable C avoids GMP's older x86 assembly relocation assumptions
+        # rejected by recent Apple linkers; GDB does not need tuned arithmetic.
+        build_dependency gmp "$GMP_VERSION" "$GMP_SHA256" "--disable-assembly"
+    else
+        build_dependency gmp "$GMP_VERSION" "$GMP_SHA256"
+    fi
     build_dependency mpfr "$MPFR_VERSION" "$MPFR_SHA256" "--with-gmp=$dependencies_prefix"
 fi
 
@@ -179,6 +200,12 @@ configure_args=(
     "--with-mpfr=$dependencies_prefix"
 )
 
+if [[ "$platform_name" == "macosx" && "${GDB_MACOS_ARCH:-}" == "arm64" ]]; then
+    # Darwin ARM64 has no upstream native backend. A distinct remote target
+    # permits a native ARM64 host executable while retaining all remote targets.
+    configure_args+=(--target=aarch64-unknown-linux-gnu --program-prefix=)
+fi
+
 if [[ "$platform_name" == "win64" ]]; then
     configure_args+=(
         --build=x86_64-w64-mingw32
@@ -215,4 +242,4 @@ python3 "$repo_root/scripts/package.py" \
     --version "$GDB_VERSION" \
     --source-sha256 "$GDB_SHA256" \
     --root "$prefix" \
-    --output "$repo_root/artifacts/gdb_${platform_name}_${GDB_VERSION}.zip"
+    --output "$repo_root/artifacts/gdb_${platform_name}${GDB_MACOS_ARCH:+-$GDB_MACOS_ARCH}_${GDB_VERSION}.zip"
