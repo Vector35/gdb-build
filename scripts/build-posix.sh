@@ -144,6 +144,19 @@ if [[ "$platform_name" == "win64" ]]; then
     # MinGW provides static archives for the runtime and all selected GDB
     # prerequisites. Keep the embedded Windows payload to one executable.
     export LDFLAGS="-static -static-libgcc -static-libstdc++ $LDFLAGS"
+    # The MI build uses GDB's console termcap stub. Library detection alone
+    # is insufficient: installed ncurses headers declare tgetnum as dllimport,
+    # leaving __imp_tgetnum references even when stub-termcap.o is linked.
+    # Keep both configure's library and header decisions consistent with the
+    # stub. Export the cache values for GDB's recursive configure invocation.
+    export ac_cv_search_tgetent=no
+    export ac_cv_header_ncursesw_ncurses_h=no
+    export ac_cv_header_ncurses_ncurses_h=no
+    export ac_cv_header_ncurses_h=no
+    export ac_cv_header_cursesX_h=no
+    export ac_cv_header_curses_h=no
+    export ac_cv_header_ncurses_term_h=no
+    export ac_cv_header_term_h=no
 fi
 
 configure_args=(
