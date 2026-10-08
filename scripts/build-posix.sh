@@ -194,8 +194,9 @@ fi
         tail -200 config.log >&2 || true
         exit 1
     fi
-    make -j"$jobs" "${make_args[@]}"
-    make "${make_args[@]}" install-strip
+    # Bash 3.2 (Apple's system Bash) treats an empty array as unset under -u.
+    make -j"$jobs" ${make_args[@]+"${make_args[@]}"}
+    make ${make_args[@]+"${make_args[@]}"} install-strip
 )
 
 # Keep the embedded payload runtime-only. The build produces several development libraries,
