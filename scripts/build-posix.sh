@@ -84,7 +84,27 @@ PY
 download_and_verify() {
     local url="$1" archive_path="$2" expected_sha="$3"
     if [[ ! -f "$archive_path" ]]; then
-        curl --fail --location --retry 3 --output "$archive_path" "$url"
+        local candidate temporary_path
+        temporary_path="$(mktemp "$archive_path.partial.XXXXXX")"
+        for candidate in "$url" "${url/ftp.gnu.org/mirrors.kernel.org}"; do
+            if curl --fail --silent --show-error --location \
+                --connect-timeout 10 --max-time 180 --retry 2 \
+                --output "$temporary_path" "$candidate"; then
+                if [[ "$(sha256_file "$temporary_path")" != "$expected_sha" ]]; then
+                    rm -f "$temporary_path"
+                    echo "Source SHA-256 mismatch from $candidate" >&2
+                    exit 1
+                fi
+                mv "$temporary_path" "$archive_path"
+                break
+            fi
+            echo "Source download failed from $candidate; trying fallback if available." >&2
+        done
+        if [[ ! -f "$archive_path" ]]; then
+            rm -f "$temporary_path"
+            echo "All source download locations failed for $url" >&2
+            exit 1
+        fi
     fi
     local actual_sha
     actual_sha="$(sha256_file "$archive_path")"
