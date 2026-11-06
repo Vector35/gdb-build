@@ -43,7 +43,10 @@ The POSIX build expects a C/C++ toolchain, GNU make, Python 3, xz, and the GDB
 development dependencies (GMP, MPFR, expat, readline, xz, and zstd). Packaging
 uses `patchelf` on Linux and the Xcode command-line tools on macOS.
 
-Windows builds run in MSYS2's MINGW64 environment:
+Windows builds run in MSYS2's MINGW64 environment. Dependency installation uses
+`https://repo.msys2.org` directly, without geo-redirectors or third-party mirrors.
+The build uses a workspace-local pacman configuration and preserves package
+signature verification; it does not change a shared MSYS2 installation's settings.
 
 ```powershell
 ./scripts/build-windows.ps1
