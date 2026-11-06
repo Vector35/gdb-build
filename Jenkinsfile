@@ -2,6 +2,11 @@ pipeline {
     agent none
 
     parameters {
+        string(
+            name: 'SCM_BRANCH',
+            defaultValue: 'main',
+            description: 'Repository branch to build (main unless testing a change)'
+        )
         choice(
             name: 'OS_FILTER',
             choices: ['all', 'linux', 'linux-arm', 'macosx', 'win64'],
