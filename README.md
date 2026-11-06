@@ -14,7 +14,7 @@ Each build produces `artifacts/gdb_<platform>_<version>.zip`. Archives have the
 same layout on every host:
 
 ```
-gdb/
+GDB/
   COPYING
   bin/gdb[.exe]
   lib/                 # non-system runtime libraries, when needed

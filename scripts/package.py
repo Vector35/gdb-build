@@ -171,7 +171,7 @@ def main():
         for path in sorted(args.root.rglob("*")):
             if not path.is_file():
                 continue
-            relative = pathlib.Path("gdb") / path.relative_to(args.root)
+            relative = pathlib.Path("GDB") / path.relative_to(args.root)
             info = zipfile.ZipInfo(relative.as_posix())
             info.compress_type = zipfile.ZIP_DEFLATED
             mode = 0o755 if os.access(path, os.X_OK) else 0o644

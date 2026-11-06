@@ -31,7 +31,7 @@ fi
 archive="$download_dir/gdb-$GDB_VERSION.tar.xz"
 source_dir="$build_dir/source"
 obj_dir="$build_dir/obj"
-prefix="$stage_dir/gdb"
+prefix="$stage_dir/GDB"
 dependencies_prefix="$build_dir/dependencies"
 
 if [[ "$platform_name" == "win64" ]]; then

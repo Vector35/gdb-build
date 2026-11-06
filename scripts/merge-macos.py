@@ -4,9 +4,9 @@ import shutil
 import subprocess
 
 repo = pathlib.Path(__file__).resolve().parents[1]
-arm = repo / 'stage/macosx-arm64/gdb'
-x86 = repo / 'stage/macosx/gdb'
-destination = repo / 'stage/macosx-universal/gdb'
+arm = repo / 'stage/macosx-arm64/GDB'
+x86 = repo / 'stage/macosx/GDB'
+destination = repo / 'stage/macosx-universal/GDB'
 if destination.exists():
     shutil.rmtree(destination)
 shutil.copytree(arm, destination)
