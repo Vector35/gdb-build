@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -x "$HOME/unlock-keychain" ]]; then
+    "$HOME/unlock-keychain"
+fi
 if [[ "$(uname -m)" != arm64 ]]; then
     echo 'Universal macOS builds require an Apple Silicon worker with Rosetta.' >&2
     exit 1

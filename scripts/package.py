@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -79,6 +80,29 @@ def bundle_macos(executable, lib_dir):
                     queue.append(bundled)
 
 
+def sign_macos(executable, lib_dir):
+    # Support both the standalone archive and the app's Helpers/Frameworks layout.
+    for library in sorted(lib_dir.glob("*.dylib")):
+        subprocess.check_call([
+            "install_name_tool", "-change", f"@executable_path/../lib/{library.name}",
+            f"@rpath/{library.name}", str(executable),
+        ])
+    load_commands = run("otool", "-l", str(executable))
+    for rpath in ("@executable_path/../lib", "@executable_path/../Frameworks"):
+        if f"path {rpath} (offset" not in load_commands:
+            subprocess.check_call(["install_name_tool", "-add_rpath", rpath, str(executable)])
+    identity = os.environ.get("GDB_CODESIGN_IDENTITY", "Developer ID")
+    for binary in [*sorted(lib_dir.glob("*.dylib")), executable]:
+        command = ["codesign", "--force", "--options", "runtime", "--sign", identity]
+        command.append("--timestamp=none" if identity == "-" else "--timestamp")
+        subprocess.check_call([*command, str(binary)])
+        subprocess.check_call(["codesign", "--verify", "--strict", str(binary)])
+    return {
+        str(binary.relative_to(executable.parent.parent)): hashlib.sha256(binary.read_bytes()).hexdigest()
+        for binary in [executable, *sorted(lib_dir.glob("*.dylib"))]
+    }
+
+
 def find_windows_dll(name):
     for entry in os.environ.get("PATH", "").split(os.pathsep):
         candidate = pathlib.Path(entry) / name
@@ -143,6 +167,7 @@ def main():
     elif args.platform == "win64":
         bundle_windows(executable, executable.parent)
 
+    signed_hashes = sign_macos(executable, lib_dir) if args.platform == "macosx" else None
     version_output = run(str(executable), "--version").splitlines()[0]
     manifest = {
         "gdb_version": args.version,
@@ -151,6 +176,7 @@ def main():
         "version_output": version_output,
     }
     if args.platform == "macosx":
+        manifest["signed_binary_sha256"] = signed_hashes
         manifest["host_architectures"] = run("/usr/bin/lipo", "-archs", str(executable)).split()
         manifest["remote_only_host_architectures"] = [
             arch for arch in manifest["host_architectures"] if arch == "arm64"

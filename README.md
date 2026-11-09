@@ -59,6 +59,18 @@ logic. It does not require or perform code signing.
 
 ## Jenkins
 
+macOS packaging adjusts library paths and signs the executable and dylibs before
+creating the archives. `GDB_CODESIGN_IDENTITY` selects the signing identity
+(default: `Developer ID`); the worker must already have access to that identity.
+The manifest records SHA-256 hashes of the signed binaries. Consumers must copy
+these files unchanged, without modifying load commands or signing them again.
+XML and other auxiliary files remain unsigned resources.
+
+The executable supports both the archive's `bin/` + `lib/` layout and an app's
+`Contents/Helpers/gdb` + `Contents/Frameworks/` layout. For the latter, place
+`share/gdb/` under `Contents/Resources/gdb/` and launch with `--data-directory`
+pointing to that directory.
+
 `Jenkinsfile` defines a parameterized matrix build. Configure a Pipeline from
 SCM pointing at this repository and leave the script path as `Jenkinsfile`.
 The job only checks out this public repository, builds on the selected native
