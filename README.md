@@ -67,7 +67,7 @@ these files unchanged, without modifying load commands or signing them again.
 XML and other auxiliary files remain unsigned resources.
 
 The executable supports both the archive's `bin/` + `lib/` layout and an app's
-`Contents/Helpers/gdb` + `Contents/Frameworks/` layout. For the latter, place
+`Contents/MacOS/plugins/gdb` + `Contents/Frameworks/` layout. For the latter, place
 `share/gdb/` under `Contents/Resources/gdb/` and launch with `--data-directory`
 pointing to that directory.
 

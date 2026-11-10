@@ -81,14 +81,15 @@ def bundle_macos(executable, lib_dir):
 
 
 def sign_macos(executable, lib_dir):
-    # Support both the standalone archive and the app's Helpers/Frameworks layout.
+    # Support the standalone archive, the legacy Helpers layout, and MacOS/plugins.
     for library in sorted(lib_dir.glob("*.dylib")):
         subprocess.check_call([
             "install_name_tool", "-change", f"@executable_path/../lib/{library.name}",
             f"@rpath/{library.name}", str(executable),
         ])
     load_commands = run("otool", "-l", str(executable))
-    for rpath in ("@executable_path/../lib", "@executable_path/../Frameworks"):
+    for rpath in ("@executable_path/../lib", "@executable_path/../Frameworks",
+                  "@executable_path/../../Frameworks"):
         if f"path {rpath} (offset" not in load_commands:
             subprocess.check_call(["install_name_tool", "-add_rpath", rpath, str(executable)])
     identity = os.environ.get("GDB_CODESIGN_IDENTITY", "Developer ID")
