@@ -62,6 +62,10 @@ def mac_dependencies(binary):
 
 
 def bundle_macos(executable, lib_dir):
+    if re.search(r"lib(?:gmp|mpfr)[^/\s]*\.dylib", run("otool", "-L", str(executable))):
+        raise SystemExit("macOS GDB must link GMP and MPFR statically")
+    if any(lib_dir.glob("libgmp*.dylib")) or any(lib_dir.glob("libmpfr*.dylib")):
+        raise SystemExit("Remove stale GMP/MPFR dylibs from the macOS staging tree")
     queue = [executable]
     seen = set()
     while queue:
@@ -88,8 +92,9 @@ def sign_macos(executable, lib_dir):
             f"@rpath/{library.name}", str(executable),
         ])
     load_commands = run("otool", "-l", str(executable))
-    for rpath in ("@executable_path/../lib", "@executable_path/../Frameworks",
-                  "@executable_path/../../Frameworks"):
+    rpaths = ("@executable_path/../lib", "@executable_path/../Frameworks",
+              "@executable_path/../../Frameworks") if any(lib_dir.glob("*.dylib")) else ()
+    for rpath in rpaths:
         if f"path {rpath} (offset" not in load_commands:
             subprocess.check_call(["install_name_tool", "-add_rpath", rpath, str(executable)])
     identity = os.environ.get("GDB_CODESIGN_IDENTITY", "Developer ID")

@@ -33,6 +33,10 @@ source_dir="$build_dir/source"
 obj_dir="$build_dir/obj"
 prefix="$stage_dir/GDB"
 dependencies_prefix="$build_dir/dependencies"
+if [[ "$platform_name" == "macosx" ]]; then
+    # Keep old shared prerequisite installs out of the static link search path.
+    dependencies_prefix="$build_dir/dependencies-static"
+fi
 
 if [[ "$platform_name" == "win64" ]]; then
     # The pinned MSYS2 environment provides a matched MinGW toolchain and development
@@ -144,6 +148,9 @@ build_dependency() {
     local dep_archive="$download_dir/$name-$version.tar.xz"
     local dep_source="$build_dir/$name-source"
     local dep_obj="$build_dir/$name-obj"
+    if [[ "$platform_name" == "macosx" ]]; then
+        dep_obj="$build_dir/$name-static-obj"
+    fi
     download_and_verify "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz" "$dep_archive" "$sha"
     mkdir -p "$dep_source" "$dep_obj"
     tar -xf "$dep_archive" --strip-components=1 -C "$dep_source"
@@ -153,12 +160,6 @@ build_dependency() {
         (cd "$dep_obj" && "$dep_source/configure" \
             --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 \
             --prefix="$dependencies_prefix" --disable-shared --enable-static $configure_extra \
-            && make -j"$jobs" && make install)
-    elif [[ "$platform_name" == "macosx" ]]; then
-        # Shared prerequisites record their dependency install names on Darwin and avoid
-        # static-link probe failures; package.py relocates both dylibs beside GDB.
-        (cd "$dep_obj" && "$dep_source/configure" \
-            --prefix="$dependencies_prefix" --enable-shared --disable-static $configure_extra \
             && make -j"$jobs" && make install)
     else
         (cd "$dep_obj" && "$dep_source/configure" \
@@ -257,6 +258,10 @@ else
 fi
 
 cp "$source_dir/COPYING" "$prefix/COPYING"
+if [[ "$platform_name" == "macosx" ]]; then
+    # Remove runtime libraries left by an earlier shared-prerequisite build.
+    rm -f "$prefix/lib"/libgmp*.dylib "$prefix/lib"/libmpfr*.dylib
+fi
 python3 "$repo_root/scripts/package.py" \
     --platform "$platform_name" \
     --version "$GDB_VERSION" \

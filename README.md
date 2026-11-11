@@ -59,15 +59,15 @@ logic. It does not require or perform code signing.
 
 ## Jenkins
 
-macOS packaging adjusts library paths and signs the executable and dylibs before
+macOS builds link GMP and MPFR statically. Packaging signs the executable before
 creating the archives. `GDB_CODESIGN_IDENTITY` selects the signing identity
 (default: `Developer ID`); the worker must already have access to that identity.
-The manifest records SHA-256 hashes of the signed binaries. Consumers must copy
-these files unchanged, without modifying load commands or signing them again.
+The manifest records the SHA-256 hash of the signed executable. Consumers must copy
+it unchanged, without modifying load commands or signing it again.
 XML and other auxiliary files remain unsigned resources.
 
-The executable supports both the archive's `bin/` + `lib/` layout and an app's
-`Contents/MacOS/plugins/gdb` + `Contents/Frameworks/` layout. For the latter, place
+The executable supports both the archive's `bin/gdb` layout and an app's
+`Contents/MacOS/plugins/gdb` layout. For the latter, place
 `share/gdb/` under `Contents/Resources/gdb/` and launch with `--data-directory`
 pointing to that directory.
 
