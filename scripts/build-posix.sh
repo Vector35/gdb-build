@@ -195,6 +195,9 @@ if [[ "$platform_name" == linux* ]]; then
             exit 1
         fi
     done
+    # GDB probes -ltermcap before -ltinfo. On some Linux workers the
+    # compatibility libtermcap linker script points to shared libtinfo.
+    export ac_cv_search_tgetent="$dependencies_prefix/lib/libtinfo.a"
     export LDFLAGS="-static-libgcc -static-libstdc++ $LDFLAGS"
 fi
 
