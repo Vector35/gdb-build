@@ -182,6 +182,22 @@ fi
 export CPPFLAGS="-I$dependencies_prefix/include ${CPPFLAGS:-}"
 export LDFLAGS="-L$dependencies_prefix/lib ${LDFLAGS:-}"
 
+if [[ "$platform_name" == linux* ]]; then
+    # Prefer static Expat and terminal libraries without making glibc static.
+    # GCC resolves these paths against the host's multiarch library directories.
+    compiler=${CC:-cc}
+    for library in expat tinfo tinfow ncurses ncursesw lzma zstd; do
+        archive_path=$($compiler "-print-file-name=lib$library.a")
+        if [[ -f "$archive_path" ]]; then
+            ln -s "$archive_path" "$dependencies_prefix/lib/lib$library.a"
+        elif [[ "$library" == expat || "$library" == tinfo ]]; then
+            echo "Missing lib$library.a; install the Expat and ncurses development packages." >&2
+            exit 1
+        fi
+    done
+    export LDFLAGS="-static-libgcc -static-libstdc++ $LDFLAGS"
+fi
+
 if [[ "$platform_name" == "win64" ]]; then
     # MinGW provides static archives for the runtime and all selected GDB
     # prerequisites. Keep the embedded Windows payload to one executable.
@@ -249,7 +265,7 @@ fi
 
 # Keep the embedded payload runtime-only. The build produces several development libraries,
 # headers, manuals, and helper scripts that are not used by the MI adapter.
-rm -rf "$prefix/include" "$prefix/share/info" "$prefix/share/man"
+rm -rf "$prefix/include" "$prefix/share/info" "$prefix/share/man" "$prefix/share/gdb/system-gdbinit"
 find "$prefix/lib" -type f \( -name '*.a' -o -name '*.la' \) -delete 2>/dev/null || true
 if [[ "$platform_name" == "win64" ]]; then
     find "$prefix/bin" -maxdepth 1 -type f ! -name 'gdb.exe' -delete
@@ -265,6 +281,5 @@ fi
 python3 "$repo_root/scripts/package.py" \
     --platform "$platform_name" \
     --version "$GDB_VERSION" \
-    --source-sha256 "$GDB_SHA256" \
     --root "$prefix" \
     --output "$repo_root/artifacts/gdb_${platform_name}${GDB_MACOS_ARCH:+-$GDB_MACOS_ARCH}_${GDB_VERSION}.zip"

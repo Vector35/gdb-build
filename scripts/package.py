@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 import argparse
-import hashlib
-import json
 import os
 import pathlib
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 
 
@@ -26,26 +25,16 @@ def copy_once(source, destination):
     return False
 
 
-def bundle_linux(executable, lib_dir):
-    if not shutil.which("patchelf"):
-        raise SystemExit("patchelf is required to create a relocatable Linux archive")
-    queue = [executable]
-    seen = set()
-    while queue:
-        binary = queue.pop(0)
-        for line in run("ldd", str(binary)).splitlines():
-            match = re.search(r"=>\s+(/\S+)", line)
-            if not match:
-                continue
-            dep = pathlib.Path(match.group(1))
-            if SYSTEM_LINUX.search(str(dep)) or dep in seen:
-                continue
-            seen.add(dep)
-            bundled = lib_dir / dep.name
-            if copy_once(dep, bundled):
-                queue.append(bundled)
-        rpath = "$ORIGIN/../lib" if binary == executable else "$ORIGIN"
-        subprocess.check_call(["patchelf", "--set-rpath", rpath, str(binary)])
+def verify_linux(executable, lib_dir):
+    dependencies = run("ldd", str(executable))
+    unexpected = []
+    for line in dependencies.splitlines():
+        if "=> " in line:
+            name, path = line.strip().split("=> ", 1)
+            if path.startswith("not found") or not SYSTEM_LINUX.search(name.strip()):
+                unexpected.append(line.strip())
+    if unexpected or any(lib_dir.glob("*.so*")):
+        raise SystemExit("Linux GDB must not require bundled shared libraries:\n" + "\n".join(unexpected))
 
 
 def mac_dependencies(binary):
@@ -103,10 +92,6 @@ def sign_macos(executable, lib_dir):
         command.append("--timestamp=none" if identity == "-" else "--timestamp")
         subprocess.check_call([*command, str(binary)])
         subprocess.check_call(["codesign", "--verify", "--strict", str(binary)])
-    return {
-        str(binary.relative_to(executable.parent.parent)): hashlib.sha256(binary.read_bytes()).hexdigest()
-        for binary in [executable, *sorted(lib_dir.glob("*.dylib"))]
-    }
 
 
 def find_windows_dll(name):
@@ -151,11 +136,37 @@ def bundle_windows(executable, bin_dir):
         )
 
 
+def verify_relocated_data_directory(archive_path, executable_name, platform):
+    # Run the actual packaged executable from a different prefix, without
+    # --data-directory, exactly as the Linux and Windows adapters launch it.
+    with tempfile.TemporaryDirectory() as directory:
+        with zipfile.ZipFile(archive_path) as archive:
+            archive.extractall(directory)
+        root = pathlib.Path(directory) / "GDB"
+        executable = root / "bin" / executable_name
+        executable.chmod(0o755)
+        data_directory = root / "share" / "gdb"
+        commands = ["-ex", "show data-directory"]
+        is_linux = platform.startswith("linux")
+        arm64 = platform == "linux-arm"
+        syscall_table = "aarch64-linux.xml" if arm64 else "amd64-linux.xml"
+        if is_linux:
+            architecture = "aarch64" if arm64 else "i386:x86-64"
+            commands += ["-ex", f"set architecture {architecture}", "-ex", "catch syscall openat"]
+        output = run(str(executable), "--nx", "--quiet", "--batch", *commands)
+        match = re.search(r'data directory is "([^"]+)"', output)
+        if (not (data_directory / "syscalls" / syscall_table).is_file()
+                or not match or not pathlib.Path(match[1]).samefile(data_directory)
+                or (is_linux and not re.search(r"Catchpoint .*openat", output))):
+            raise SystemExit("GDB could not find relocated syscall XML:\n" + output)
+        print(output, end="")
+
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--platform", required=True)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--source-sha256", required=True)
     parser.add_argument("--root", type=pathlib.Path, required=True)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     args = parser.parse_args()
@@ -167,39 +178,27 @@ def main():
     lib_dir = args.root / "lib"
     lib_dir.mkdir(parents=True, exist_ok=True)
     if args.platform.startswith("linux"):
-        bundle_linux(executable, lib_dir)
+        verify_linux(executable, lib_dir)
     elif args.platform == "macosx":
         bundle_macos(executable, lib_dir)
     elif args.platform == "win64":
         bundle_windows(executable, executable.parent)
 
-    signed_hashes = sign_macos(executable, lib_dir) if args.platform == "macosx" else None
-    version_output = run(str(executable), "--version").splitlines()[0]
-    manifest = {
-        "gdb_version": args.version,
-        "platform": args.platform,
-        "source_sha256": args.source_sha256,
-        "version_output": version_output,
-    }
     if args.platform == "macosx":
-        manifest["signed_binary_sha256"] = signed_hashes
-        manifest["host_architectures"] = run("/usr/bin/lipo", "-archs", str(executable)).split()
-        manifest["remote_only_host_architectures"] = [
-            arch for arch in manifest["host_architectures"] if arch == "arm64"
-        ]
-    (args.root / "build-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        sign_macos(executable, lib_dir)
 
     smoke = subprocess.run(
         [str(executable), "--nx", "--quiet", "--interpreter=mi2"],
         input="-gdb-version\n-gdb-exit\n", text=True, capture_output=True, timeout=30,
     )
-    if smoke.returncode != 0 or "^done" not in smoke.stdout:
+    if smoke.returncode != 0 or "^done" not in smoke.stdout or f"GDB) {args.version}" not in smoke.stdout:
         print(smoke.stdout, file=sys.stderr)
         print(smoke.stderr, file=sys.stderr)
         raise SystemExit("GDB MI2 smoke test failed")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(args.output, "w", zipfile.ZIP_DEFLATED) as archive:
+    pending = args.output.with_suffix(".zip.tmp")
+    with zipfile.ZipFile(pending, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(args.root.rglob("*")):
             if not path.is_file():
                 continue
@@ -209,6 +208,9 @@ def main():
             mode = 0o755 if os.access(path, os.X_OK) else 0o644
             info.external_attr = mode << 16
             archive.writestr(info, path.read_bytes())
+    if args.platform.startswith("linux") or args.platform == "win64":
+        verify_relocated_data_directory(pending, executable.name, args.platform)
+    pending.replace(args.output)
     print(args.output)
 
 

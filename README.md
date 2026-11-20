@@ -4,9 +4,8 @@ Reproducible native builds of GNU GDB for Linux, macOS, and Windows. The
 result is a relocatable archive suitable for embedding in another application.
 
 The source version and SHA-256 are pinned in `versions.env`. Builds deliberately
-disable Python, Guile, source-highlight, and code signing to keep the runtime
-small and deterministic. Signing and notarization belong in the downstream
-product pipeline.
+disable Python, Guile, and source-highlight to keep the runtime small. macOS
+executables are signed before packaging.
 
 ## Outputs
 
@@ -19,12 +18,11 @@ GDB/
   bin/gdb[.exe]
   lib/                 # non-system runtime libraries, when needed
   share/gdb/
-  build-manifest.json
 ```
 
 Supported platform names are `linux`, `linux-arm`, `macosx`, and `win64`.
-The macOS archive contains a universal ARM64/x86_64 executable and universal
-GMP/MPFR libraries. Building it requires an Apple Silicon worker with Rosetta.
+The macOS archive contains a universal ARM64/x86_64 executable with statically
+linked GMP and MPFR. Building it requires an Apple Silicon worker with Rosetta.
 The ARM64 slice is remote-only: upstream GDB lacks a Darwin ARM64 native backend.
 The x86_64 slice retains Darwin native support. Both support all remote targets.
 The version-scoped
@@ -40,8 +38,10 @@ Linux and macOS:
 ```
 
 The POSIX build expects a C/C++ toolchain, GNU make, Python 3, xz, and the GDB
-development dependencies (GMP, MPFR, expat, readline, xz, and zstd). Packaging
-uses `patchelf` on Linux and the Xcode command-line tools on macOS.
+development dependencies. Linux requires the static Expat and terminal
+archives (on Debian or Ubuntu, install `libexpat1-dev` and `libncurses-dev`).
+Linux links non-system dependencies statically and still uses system glibc.
+macOS requires the Xcode command-line tools.
 
 Windows builds run in MSYS2's MINGW64 environment. Dependency installation uses
 `https://repo.msys2.org` directly, without geo-redirectors or third-party mirrors.
@@ -62,7 +62,7 @@ logic. It does not require or perform code signing.
 macOS builds link GMP and MPFR statically. Packaging signs the executable before
 creating the archives. `GDB_CODESIGN_IDENTITY` selects the signing identity
 (default: `Developer ID`); the worker must already have access to that identity.
-The manifest records the SHA-256 hash of the signed executable. Consumers must copy
+Consumers must copy
 it unchanged, without modifying load commands or signing it again.
 XML and other auxiliary files remain unsigned resources.
 

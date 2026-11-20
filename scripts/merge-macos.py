@@ -26,6 +26,6 @@ for architecture in ('arm64', 'x86_64'):
 versions = dict(line.split('=', 1) for line in (repo / 'versions.env').read_text().splitlines()
                 if line and not line.startswith('#') and '=' in line)
 subprocess.run(['python3', str(repo / 'scripts/package.py'), '--platform', 'macosx',
-                '--version', versions['GDB_VERSION'], '--source-sha256', versions['GDB_SHA256'],
+                '--version', versions['GDB_VERSION'],
                 '--root', str(destination), '--output',
                 str(repo / f"artifacts/gdb_macosx_{versions['GDB_VERSION']}.zip")], check=True)
